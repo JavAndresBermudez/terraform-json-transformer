@@ -1,0 +1,51 @@
+name: Transform Terraform to JSON
+
+on:
+  push:
+    paths: ["**/*.tf", "scripts/terraform_aws_transformer.py"]
+  pull_request:
+    paths: ["**/*.tf", "scripts/terraform_aws_transformer.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  transform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-hcl2
+
+      - name: Show python-hcl2 version
+        run: python -c "import hcl2, sys; print('hcl2:', getattr(hcl2, '__version__', 'n/a')); print(sys.version)"
+
+      - name: Sanity check (compile)
+        run: |
+          python -m py_compile scripts/terraform_aws_transformer.py
+
+      - name: Run transformer (scan repo)
+        run: |
+          mkdir -p output
+          python scripts/terraform_aws_transformer.py . -o output/terraform.json --include-ignored
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-json-${{ matrix.os }}
+          path: output/terraform.json
